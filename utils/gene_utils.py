@@ -1,11 +1,20 @@
 import numpy as np
 from scipy.spatial.distance import cosine
+from sklearn.metrics.pairwise import cosine_similarity
 
-def find_closest_genes(target_gene, gene_embeddings, n=20):
-    target_embedding = gene_embeddings[target_gene]
-    similarities = [(gene, 1 - cosine(embedding, target_embedding)) 
-                    for gene, embedding in gene_embeddings.items() 
-                    if gene != target_gene]
+def find_closest_genes(gene_id, gene_embeddings, n=10, search_option="Human and Mouse genes"):
+    target_embedding = gene_embeddings[gene_id].reshape(1, -1)  # Reshape to 2D array
+
+    if search_option == "Human genes":
+        gene_pool = [g for g in gene_embeddings if not g.startswith("m_")]
+    elif search_option == "Mouse genes":
+        gene_pool = [g for g in gene_embeddings if g.startswith("m_")]
+    else:  # "Human and Mouse genes"
+        gene_pool = list(gene_embeddings.keys())
+
+    similarities = [(g, cosine_similarity(target_embedding, gene_embeddings[g].reshape(1, -1))[0][0]) 
+                    for g in gene_pool if g != gene_id]
+
     return sorted(similarities, key=lambda x: x[1], reverse=True)[:n]
 
 def calculate_similarity(gene1, gene2, gene_embeddings):

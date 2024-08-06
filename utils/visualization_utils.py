@@ -6,7 +6,7 @@ from sklearn.manifold import TSNE
 import umap
 import plotly.express as px
 import plotly.graph_objects as go
-from utils.data_utils import get_gene_id
+
 
 # Global colorblind-friendly color palette
 COLORBLIND_COLORS = {
@@ -40,13 +40,15 @@ def plot_gene_embeddings(embeddings, genes, method, target_gene=None, lists=None
     df = pd.DataFrame({
         'x': embeddings_2d[:, 0],
         'y': embeddings_2d[:, 1],
-        'gene': genes
+        'gene': genes,
+        'species': ['Mouse' if gene.startswith('m_') else 'Human' for gene in genes]
     })
     
     if target_gene:
         df['My input gene'] = df['gene'] == target_gene
         fig = px.scatter(df, x='x', y='y', text='gene', color='My input gene',
                          color_discrete_map={True: COLORBLIND_COLORS['red'], False: COLORBLIND_COLORS['blue']},
+                         symbol='species',
                          title=f"{method} Visualization of Similar Genes")
     elif lists:
         color_map = {'List 1': COLORBLIND_COLORS['blue'], 
@@ -55,9 +57,11 @@ def plot_gene_embeddings(embeddings, genes, method, target_gene=None, lists=None
         df['list'] = ['List 1' if gene in lists[0] else 'List 2' if len(lists) > 1 and gene in lists[1] else 'List 3' for gene in genes]
         fig = px.scatter(df, x='x', y='y', text='gene', color='list',
                         color_discrete_map=color_map,
+                        symbol='species',
                         title=f"{method} Visualization of Gene Lists")
     else:
-        fig = px.scatter(df, x='x', y='y', text='gene',
+        fig = px.scatter(df, x='x', y='y', text='gene', color='species',
+                         color_discrete_map={'Human': COLORBLIND_COLORS['blue'], 'Mouse': COLORBLIND_COLORS['orange']},
                          title=f"{method} Visualization of Gene Embeddings")
     
     fig.update_traces(textposition='top center')

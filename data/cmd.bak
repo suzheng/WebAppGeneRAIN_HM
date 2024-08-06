@@ -1,0 +1,3 @@
+gadidown /g/data/yr31/zs2131/tasks/2023/RNA_expr_net/GeneRAIN_Mouse/data/external/Gencode/*ID_Mapping.txt ./|sh
+for i in *_ID_Mapping.txt;do fgrep -w -f gene_ids $i >$i.clean;done
+for i in *_ID_Mapping.txt;do cat gene_ids|perl -pe 's/m_//'|fgrep -w -f - $i >$i.clean;done

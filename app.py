@@ -1,27 +1,15 @@
 import streamlit as st
-from utils.data_utils import read_gene_embeddings, load_gene_id_mapping, get_gene_id, add_google_analytics
+from utils.data_utils import human_ensembl_to_symbol, human_symbol_to_ensembl, mouse_ensembl_to_symbol, mouse_symbol_to_ensembl, gene_embeddings, process_gene_list, process_gene
 from utils.gene_utils import find_closest_genes, calculate_similarity, gene_calculation
 from utils.visualization_utils import plot_gene_embeddings, plot_gene_relationship
 import pandas as pd
-from utils.data_utils import get_gene_id
 from PIL import Image
 # Load gene embeddings and ID mapping
-file_path = "data/GeneRAIN-vec.200d.txt.gz"
-mapping_file_path = "data/gencode.v43.Ensembl_ID_gene_symbol_mapping.GeneRAIN.txt"
-gene_embeddings = read_gene_embeddings(file_path)
-ensembl_to_symbol, symbol_to_ensembl = load_gene_id_mapping(mapping_file_path)
-
-# try:
-#     measurement_id = st.secrets['Measurement_Id']
-#     add_google_analytics()
-#     # st.write(f"Google Analytics has been integrated successfully, ID {measurement_id}.")
-# except FileNotFoundError:
-#     st.write("Secrets file not found. Google Analytics integration skipped.")
-# except KeyError:
-#     st.write("Google Analytics Measurement ID is not available in the secrets.")
 
 # Sidebar for navigation
 st.sidebar.title("GeneRAIN-vec")
+
+# could you please update my app.py for my human mouse paper. Existing app.py code is for another paper, which only has human. I want to have similar tool for Human-Mouse. Before the submit button, add radio options like "Find similar Human genes", "Find Similar mouse genes", "Find Similar Human or Mouse genes". And use the process_gene_list to process user input. And print out warning message. And in the figure, use different color for two species:
 
 # Create a container for the navigation buttons
 nav_container = st.sidebar.container()
@@ -115,37 +103,44 @@ def similar_genes():
     
     ### How to use:
     1. Enter a gene symbol or Ensembl ID in the text box below.
-    2. Select the number of similar genes to display.
-    3. The app will display the most similar genes and their similarity scores.
-    4. A visualization of these genes will be shown using PCA, t-SNE, or UMAP for dimensionality reduction.
+    2. Select the species you want to find similar genes in.
+    3. Select the number of similar genes to display.
+    4. The app will display the most similar genes and their similarity scores.
+    5. A visualization of these genes will be shown using PCA, t-SNE, or UMAP for dimensionality reduction.
     """)
     
     col1, col2 = st.columns([3, 1])
     with col1:
         target_gene = st.text_input("Enter a gene name or Ensembl ID (e.g. TP53 or ENSG00000141510):", key="target_gene_input")
+        search_option = st.radio("Find similar genes in:", ["Human genes", "Mouse genes", "Human and Mouse genes"])
         num_genes = st.selectbox("Number of similar genes to return:", options=[10, 20, 50, 100], index=0)
-        submit_button = st.button("Submit", key="submit_button", use_container_width=True, help="Click to find similar genes")
-        st.markdown('<div class="primary-button"></div>', unsafe_allow_html=True)       
 
+    submit_button = st.button("Submit", key="submit_button", use_container_width=True, help="Click to find similar genes")
+    st.markdown('<div class="primary-button"></div>', unsafe_allow_html=True)       
 
     if submit_button or target_gene:
-        gene_id = get_gene_id(target_gene, gene_embeddings, ensembl_to_symbol, symbol_to_ensembl)
-        if gene_id:
-            similar_genes = find_closest_genes(gene_id, gene_embeddings, n=num_genes)
+        valid_genes, invalid_genes = process_gene_list(target_gene)
+        if invalid_genes:
+            st.warning(f"The following genes were not found and will be excluded: {', '.join(invalid_genes)}")
+        
+        if valid_genes:
+            gene_symbol, gene_id = valid_genes[0]
+            similar_genes = find_closest_genes(gene_symbol, gene_embeddings, n=num_genes, search_option=search_option)
             
             # Prepare data for the table
             table_data = []
             for gene, similarity in similar_genes:
-                symbol = ensembl_to_symbol.get(gene, gene)
-                ensembl = symbol_to_ensembl.get(gene, gene)
-                if symbol == ensembl:
-                    display_name = symbol
-                else:
-                    display_name = f"{symbol} ({ensembl})"
-                table_data.append({"Gene Symbol": symbol, "Ensembl ID": ensembl, "Similarity Score": f"{similarity:.4f}"})
+                symbol, ensembl = process_gene(gene)
+                species = "Mouse" if symbol.startswith("m_") else "Human"
+                table_data.append({
+                    "Gene Symbol": symbol.replace("m_", ""),
+                    "Ensembl ID": ensembl.replace("m_", ""),
+                    "Species": species,
+                    "Similarity Score": f"{similarity:.4f}"
+                })
             
             # Display the table with pagination
-            st.write(f"Genes similar to {target_gene}:")
+            st.write(f"Genes similar to {gene_symbol}:")
             df = pd.DataFrame(table_data)
             page_size = 10
             num_pages = (len(df) + page_size - 1) // page_size
@@ -165,14 +160,13 @@ def similar_genes():
             st.download_button(
                 label="Download CSV",
                 data=csv,
-                file_name=f"similar_genes_to_{target_gene}.csv",
+                file_name=f"similar_genes_to_{gene_symbol}.csv",
                 mime="text/csv",
             )
             
             # Visualization
             st.subheader("Visualization of Similar Genes")
-            # genes_to_plot = [gene_id] + [gene for gene, _ in similar_genes[:min(19, num_genes-1)]]
-            genes_to_plot = [gene_id] + [gene for gene, _ in similar_genes]
+            genes_to_plot = [gene_symbol] + [gene for gene, _ in similar_genes]
             embeddings_to_plot = [gene_embeddings[gene] for gene in genes_to_plot]
             
             method = st.radio("Select visualization method:", ["PCA", "t-SNE", "UMAP"])
